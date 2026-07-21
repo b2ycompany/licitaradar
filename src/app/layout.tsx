@@ -1,0 +1,70 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import "./globals.css";
+import { SyncButton } from "@/components/SyncButton";
+
+export const metadata: Metadata = {
+  title: "LicitaRadar — radar de licitações públicas",
+  description:
+    "Dashboard de prospecção de licitações públicas com dados do PNCP: valores, estados, categorias, prazos e match de documentos.",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
+  return (
+    <html lang="pt-BR">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body className="flex min-h-screen flex-col">
+        <header className="sticky top-0 z-20 border-b-2 border-tinta bg-papel/95 backdrop-blur">
+          <div className="flex w-full flex-wrap items-center justify-between gap-4 px-4 py-5 sm:px-6 lg:px-10 xl:px-16">
+            <div>
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-verde">
+                Lei 14.133/2021 · Dados abertos do PNCP
+              </p>
+              <h1 className="text-3xl font-extrabold tracking-tight">
+                <Link href="/">
+                  Licita<span className="text-verde">Radar</span>
+                </Link>
+              </h1>
+            </div>
+            <nav className="flex items-center gap-5">
+              <Link
+                href="/"
+                className="text-base font-semibold hover:text-verde focus-visible:outline focus-visible:outline-2 focus-visible:outline-verde"
+              >
+                Dashboard
+              </Link>
+              <Link
+                href="/perfil"
+                className="text-base font-semibold hover:text-verde focus-visible:outline focus-visible:outline-2 focus-visible:outline-verde"
+              >
+                Meu perfil
+              </Link>
+              <SyncButton />
+            </nav>
+          </div>
+        </header>
+        <main className="w-full flex-1 px-4 py-8 sm:px-6 lg:px-10 xl:px-16">
+          {children}
+        </main>
+        <footer className="w-full px-4 pb-8 pt-2 text-sm text-cinza sm:px-6 lg:px-10 xl:px-16">
+          Fonte dos dados: API pública de consulta do PNCP. A lista de
+          documentos por licitação é uma estimativa — confira sempre o edital
+          oficial antes de enviar proposta.
+        </footer>
+      </body>
+    </html>
+  );
+}

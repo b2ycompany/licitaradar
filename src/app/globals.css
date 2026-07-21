@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-papel text-tinta antialiased;
+}
+
+/* Selo de prazo — assinatura visual do LicitaRadar: um "carimbo"
+   levemente rotacionado indicando quantos dias restam. */
+.selo {
+  @apply inline-flex flex-col items-center justify-center rounded-full border-2 font-mono leading-none;
+  width: 4.25rem;
+  height: 4.25rem;
+  transform: rotate(-4deg);
+}
+
+.selo-ok {
+  @apply border-verde text-verde;
+}
+
+.selo-atencao {
+  @apply border-ambar text-ambar;
+}
+
+.selo-urgente {
+  @apply border-vermelho text-vermelho;
+}
+
+.selo-encerrado {
+  @apply border-cinza text-cinza;
+  transform: rotate(-4deg) ;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .card-licitacao {
+    transition:
+      transform 120ms ease,
+      box-shadow 120ms ease;
+  }
+
+  .card-licitacao:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(27, 42, 33, 0.08);
+  }
+}
