@@ -7,7 +7,9 @@ import { garantirSeed } from "@/lib/seed";
 
 export const dynamic = "force-dynamic";
 
-const TAMANHO_MAXIMO = 8 * 1024 * 1024; // 8 MB
+// A Vercel limita o corpo de requisição/resposta de toda função
+// (em qualquer plano) a 4,5 MB. Ficamos com margem de segurança.
+const TAMANHO_MAXIMO = 4 * 1024 * 1024; // 4 MB
 const TIPOS_ACEITOS = new Set([
   "application/pdf",
   "image/jpeg",
@@ -48,7 +50,7 @@ export async function POST(req: Request) {
 
   if (arquivo.size > TAMANHO_MAXIMO) {
     return NextResponse.json(
-      { ok: false, erro: "Arquivo acima de 8 MB." },
+      { ok: false, erro: "Arquivo acima de 4 MB." },
       { status: 413 },
     );
   }

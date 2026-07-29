@@ -164,8 +164,18 @@ export function LicitacaoCard({
         </div>
       </div>
 
-      <p className="mt-3 border-t border-dashed border-borda pt-2 font-mono text-[10px] text-cinza">
-        Nº controle PNCP: {licitacao.id}
+      <p className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-dashed border-borda pt-2">
+        <span className="font-mono text-[10px] text-cinza">
+          Nº controle PNCP: {licitacao.id}
+        </span>
+        {licitacao.cnpjOrgao && (
+          <a
+            href={`/concorrencia?cnpj=${licitacao.cnpjOrgao}&nome=${encodeURIComponent(licitacao.orgao)}`}
+            className="text-xs font-semibold text-verde-escuro underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-verde"
+          >
+            📊 Ver concorrência deste órgão
+          </a>
+        )}
       </p>
     </article>
   );

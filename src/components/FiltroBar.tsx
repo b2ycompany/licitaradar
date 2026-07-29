@@ -37,7 +37,8 @@ export function FiltroBar({ categorias, modalidades }: Props) {
     } else {
       novos.delete(chave);
     }
-    router.replace(`/?${novos.toString()}`);
+    const query = novos.toString();
+    router.replace(query ? `/?${query}` : "/", { scroll: false });
   }
 
   const abaAtiva = params.get("aba") ?? "abertas";

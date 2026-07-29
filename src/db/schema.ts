@@ -89,6 +89,33 @@ export type Perfil = typeof perfil.$inferSelect;
 export type Documento = typeof documentos.$inferSelect;
 
 /**
+ * Histórico de contratos firmados (dados oficiais do PNCP,
+ * endpoint /v1/contratos) — é aqui que aparece QUEM ganhou: nome
+ * e CNPJ do fornecedor, valor e categoria. Base da inteligência
+ * competitiva: "quem costuma vencer neste órgão/categoria".
+ */
+export const contratosVencedores = pgTable("contratos_vencedores", {
+  id: text("id").primaryKey(), // numeroControlePNCP do contrato
+  numeroControlePNCPCompra: text("numero_controle_pncp_compra"),
+  cnpjOrgao: text("cnpj_orgao").notNull(),
+  orgao: text("orgao").notNull().default(""),
+  uf: text("uf"),
+  municipio: text("municipio"),
+  categoriaProcesso: text("categoria_processo"), // taxonomia própria do PNCP
+  categoria: text("categoria").notNull().default("Outros"), // nossa taxonomia (categorize.ts)
+  objeto: text("objeto").notNull().default(""),
+  fornecedorCnpj: text("fornecedor_cnpj"),
+  fornecedorNome: text("fornecedor_nome").notNull().default(""),
+  valorInicial: doublePrecision("valor_inicial"),
+  valorGlobal: doublePrecision("valor_global"),
+  dataAssinatura: text("data_assinatura"),
+  criadoEm: text("criado_em").notNull(),
+});
+
+export type ContratoVencedor = typeof contratosVencedores.$inferSelect;
+export type NovoContratoVencedor = typeof contratosVencedores.$inferInsert;
+
+/**
  * Versão do documento sem o binário — é o que circula entre
  * servidor e componentes (o arquivo em si só trafega nas rotas
  * de upload/download).

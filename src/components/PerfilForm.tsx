@@ -238,7 +238,7 @@ export function PerfilForm({ perfilInicial, documentosIniciais }: Props) {
       <section className="rounded-lg border border-borda bg-white p-5">
         <h3 className="font-semibold">Cofre de documentos de habilitação</h3>
         <p className="mt-1 max-w-3xl text-xs text-cinza">
-          Anexe o arquivo (PDF/JPG/PNG, até 8 MB) e informe a validade das
+          Anexe o arquivo (PDF/JPG/PNG, até 4 MB) e informe a validade das
           certidões. O upload já marca o documento como “tenho”. É isso que
           libera o selo verde “Apta” no dashboard e alimenta a montagem
           automática do dossiê.

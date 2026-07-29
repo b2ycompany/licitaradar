@@ -9,6 +9,7 @@ import {
   isNotNull,
   ne,
   or,
+  type SQL,
 } from "drizzle-orm";
 import { db } from "@/db";
 import { colunasDocumentoMeta, documentos, licitacoes, perfil } from "@/db/schema";
@@ -16,6 +17,7 @@ import { garantirSeed } from "@/lib/seed";
 import { avaliarLicitacao, deduplicar } from "@/lib/match";
 import { diasAte } from "@/lib/format";
 import { medirFim, medirInicio } from "@/lib/perf";
+import { comRetry } from "@/lib/retry";
 import { FiltroBar } from "@/components/FiltroBar";
 import { StatsCards } from "@/components/StatsCards";
 import { LicitacaoCard } from "@/components/LicitacaoCard";
@@ -53,22 +55,23 @@ export default async function Home({
 
   await garantirSeed();
 
-  // Monta as condições do filtro dinamicamente
-  const condicoes = [];
-  if (aba === "favoritas") condicoes.push(eq(licitacoes.favorita, true));
-  if (aba === "acompanhando") condicoes.push(ne(licitacoes.status, "nova"));
+  // Monta as condições do filtro dinamicamente. `condicoesBase` não
+  // inclui UF — serve para o diagnóstico de distribuição por estado
+  // quando o filtro de UF não encontra nada (ver mais abaixo).
+  const condicoesBase: (SQL | undefined)[] = [];
+  if (aba === "favoritas") condicoesBase.push(eq(licitacoes.favorita, true));
+  if (aba === "acompanhando") condicoesBase.push(ne(licitacoes.status, "nova"));
   if (aba === "abertas") {
-    condicoes.push(
+    condicoesBase.push(
       isNotNull(licitacoes.dataEncerramentoProposta),
       gte(licitacoes.dataEncerramentoProposta, agoraISO),
     );
   }
-  if (uf) condicoes.push(eq(licitacoes.uf, uf));
-  if (categoria) condicoes.push(eq(licitacoes.categoria, categoria));
-  if (modalidade) condicoes.push(eq(licitacoes.modalidadeNome, modalidade));
-  if (valorMin > 0) condicoes.push(gte(licitacoes.valorEstimado, valorMin));
+  if (categoria) condicoesBase.push(eq(licitacoes.categoria, categoria));
+  if (modalidade) condicoesBase.push(eq(licitacoes.modalidadeNome, modalidade));
+  if (valorMin > 0) condicoesBase.push(gte(licitacoes.valorEstimado, valorMin));
   if (q) {
-    condicoes.push(
+    condicoesBase.push(
       or(
         ilike(licitacoes.objeto, `%${q}%`),
         ilike(licitacoes.orgao, `%${q}%`),
@@ -77,12 +80,20 @@ export default async function Home({
     );
   }
 
+  const condicoes: (SQL | undefined)[] = [...condicoesBase];
+  if (uf) condicoes.push(eq(licitacoes.uf, uf));
+
+  console.log(
+    `[perf] 🔍 filtros: aba=${aba} uf=${uf ?? "-"} categoria=${categoria ?? "-"} modalidade=${modalidade ?? "-"} q="${q ?? ""}" valorMin=${valorMin} soAptas=${soAptas}`,
+  );
+
   const ordem =
     aba === "todas"
       ? desc(licitacoes.dataPublicacao)
       : asc(licitacoes.dataEncerramentoProposta);
 
-  // Consultas independentes disparadas em paralelo
+  // Consultas independentes disparadas em paralelo. Envolvidas em
+  // retry: um pico de instabilidade de rede não derruba a página.
   const inicioConsultas = medirInicio();
   const [
     brutos,
@@ -91,27 +102,57 @@ export default async function Home({
     totalLinha,
     perfilLinhas,
     cofre,
-  ] = await Promise.all([
-    db
-      .select()
-      .from(licitacoes)
-      .where(condicoes.length ? and(...condicoes) : undefined)
-      .orderBy(ordem)
-      .limit(LIMITE_CONSULTA),
-    db
-      .selectDistinct({ categoria: licitacoes.categoria })
-      .from(licitacoes)
-      .orderBy(asc(licitacoes.categoria)),
-    db
-      .selectDistinct({ modalidade: licitacoes.modalidadeNome })
-      .from(licitacoes)
-      .where(isNotNull(licitacoes.modalidadeNome))
-      .orderBy(asc(licitacoes.modalidadeNome)),
-    db.select({ n: count() }).from(licitacoes),
-    db.select().from(perfil).limit(1),
-    db.select(colunasDocumentoMeta).from(documentos),
-  ]);
+  ] = await comRetry(
+    () =>
+      Promise.all([
+        db
+          .select()
+          .from(licitacoes)
+          .where(condicoes.length ? and(...condicoes.filter((c): c is SQL => c !== undefined)) : undefined)
+          .orderBy(ordem)
+          .limit(LIMITE_CONSULTA),
+        db
+          .selectDistinct({ categoria: licitacoes.categoria })
+          .from(licitacoes)
+          .orderBy(asc(licitacoes.categoria)),
+        db
+          .selectDistinct({ modalidade: licitacoes.modalidadeNome })
+          .from(licitacoes)
+          .where(isNotNull(licitacoes.modalidadeNome))
+          .orderBy(asc(licitacoes.modalidadeNome)),
+        db.select({ n: count() }).from(licitacoes),
+        db.select().from(perfil).limit(1),
+        db.select(colunasDocumentoMeta).from(documentos),
+      ]),
+    "dashboard: 6 consultas",
+  );
   medirFim(inicioConsultas, `dashboard: 6 consultas (aba=${aba})`);
+  console.log(`[perf] 🔍 resultado: ${brutos.length} linhas brutas para uf=${uf ?? "(todos)"}`);
+
+  // Diagnóstico: se um filtro de UF não achou nada, mostra o que
+  // EXISTE de fato no recorte atual (mesma aba/categoria/etc, sem
+  // o filtro de UF) — distingue "seu filtro está certo, só não há
+  // dado desse estado ainda" de "o filtro está quebrado".
+  let distribuicaoUf: { uf: string | null; n: number }[] = [];
+  if (uf && brutos.length === 0) {
+    distribuicaoUf = await db
+      .select({ uf: licitacoes.uf, n: count() })
+      .from(licitacoes)
+      .where(
+        condicoesBase.length
+          ? and(...condicoesBase.filter((c): c is SQL => c !== undefined))
+          : undefined,
+      )
+      .groupBy(licitacoes.uf)
+      .orderBy(desc(count()));
+
+    console.log(
+      `[perf] 🔍 UF "${uf}" não apareceu. Distribuição real (aba=${aba}): ` +
+        (distribuicaoUf.length
+          ? distribuicaoUf.map((d) => `${d.uf ?? "(sem UF)"}=${d.n}`).join(", ")
+          : "nenhuma linha no recorte atual, nem de outros estados"),
+    );
+  }
 
   const perfilEmpresa = perfilLinhas[0] ?? null;
 
@@ -199,6 +240,14 @@ export default async function Home({
                   Meu perfil
                 </a>{" "}
                 ou remova o filtro para ver todas.
+              </>
+            ) : uf && distribuicaoUf.length > 0 ? (
+              <>
+                Nenhuma licitação de <strong>{uf}</strong> neste recorte agora.
+                O que existe: {distribuicaoUf.map((d) => `${d.uf ?? "sem estado"} (${d.n})`).join(", ")}.
+                {" "}Isso costuma ser cobertura parcial do sync (o PNCP limita
+                quantas páginas dá para puxar de uma vez) — sincronize de novo
+                em alguns minutos para ampliar.
               </>
             ) : (
               "Ajuste os filtros acima ou sincronize novamente para trazer dados mais recentes."
