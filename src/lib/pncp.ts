@@ -130,6 +130,7 @@ export async function buscarPropostasAbertas(
     pagina: number;
     tamanhoPagina?: number;
     codigoModalidade?: number;
+    uf?: string;
   },
   aoTentar?: (evento: EventoTentativa) => void,
 ): Promise<PncpResposta> {
@@ -142,6 +143,9 @@ export async function buscarPropostasAbertas(
       "codigoModalidadeContratacao",
       String(params.codigoModalidade),
     );
+  }
+  if (params.uf) {
+    url.searchParams.set("uf", params.uf);
   }
 
   // Pausa fixa antes de cada chamada — evita disparar todas as
@@ -218,7 +222,7 @@ export async function buscarPropostasAbertas(
     }
 
     const json = (await res.json()) as PncpResposta;
-    medirFim(inicioPagina, `PNCP página ${params.pagina}`);
+    medirFim(inicioPagina, `PNCP página ${params.pagina}${params.uf ? ` (uf=${params.uf})` : ""}`);
     return json;
   }
 

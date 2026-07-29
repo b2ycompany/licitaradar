@@ -5,16 +5,36 @@ import {
   buscarPropostasAbertas,
   hojeAAAAMMDD,
   nomeEsfera,
-  type EventoTentativa,
   type PncpContratacao,
 } from "@/lib/pncp";
 import { categorizar } from "@/lib/categorize";
 import { medirFim, medirInicio } from "@/lib/perf";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 180;
 
-/** Converte uma contratação do PNCP para o formato do banco. */
+/**
+ * Todos os 26 estados + DF. A ordem é embaralhada a cada
+ * sincronização — se o PNCP limitar o ritmo antes de terminar
+ * (acontece com frequência), sync após sync a cobertura vai se
+ * equilibrando entre TODOS os estados, em vez de sempre parar nos
+ * mesmos primeiros da lista.
+ */
+const TODOS_UF = [
+  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
+  "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC",
+  "SP", "SE", "TO",
+];
+
+function embaralhar<T>(lista: T[]): T[] {
+  const copia = [...lista];
+  for (let i = copia.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copia[i], copia[j]] = [copia[j], copia[i]];
+  }
+  return copia;
+}
+
 function mapear(c: PncpContratacao, agora: string): NovaLicitacao | null {
   if (!c.numeroControlePNCP) return null;
 
@@ -49,24 +69,26 @@ function sqlExcluded(coluna: string) {
 }
 
 /**
- * POST /api/sync?paginas=20
+ * POST /api/sync?paginasPorEstado=2
  *
- * Responde em STREAM (ND-JSON — uma linha de JSON por evento) em
- * vez de esperar tudo terminar para responder uma vez só. Isso
- * permite à tela mostrar o progresso página a página em tempo
- * real, inclusive durante as esperas de rate-limit do PNCP.
+ * Varre licitações com propostas em aberto ESTADO POR ESTADO (os
+ * 27 estados, em ordem embaralhada), em vez de uma paginação
+ * nacional "cega" — que na prática só alcançava as primeiras ~9
+ * páginas antes do PNCP limitar o ritmo, deixando estados inteiros
+ * de fora (foi o caso do Pará). Responde em stream (ND-JSON).
  */
 export async function POST(req: Request) {
   const inicioTotal = medirInicio();
   const { searchParams } = new URL(req.url);
-  const maxPaginas = Math.min(
-    Math.max(Number(searchParams.get("paginas")) || 20, 1),
-    40,
+  const paginasPorEstado = Math.min(
+    Math.max(Number(searchParams.get("paginasPorEstado")) || 2, 1),
+    5,
   );
 
   const dataFinal = hojeAAAAMMDD();
   const agora = new Date().toISOString();
   const codificador = new TextEncoder();
+  const ordemEstados = embaralhar(TODOS_UF);
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -74,102 +96,117 @@ export async function POST(req: Request) {
         controller.enqueue(codificador.encode(JSON.stringify(evento) + "\n"));
       }
 
-      let pagina = 1;
-      let totalPaginas = 1;
       let importadas = 0;
+      const estadosConcluidos: string[] = [];
       let avisoLimite: string | null = null;
+      let pararTudo = false;
 
-      enviar({ tipo: "inicio", maxPaginas });
-      console.log(`[perf] sync: iniciando, até ${maxPaginas} páginas`);
-
-      const aoTentar = (ev: EventoTentativa) => {
-        enviar({
-          tipo: "tentativa",
-          pagina: ev.pagina,
-          tentativa: ev.tentativa,
-          maxTentativas: ev.maxTentativas,
-          motivo: ev.motivo,
-          esperaMs: ev.esperaMs,
-        });
-      };
+      enviar({ tipo: "inicio", totalEstados: ordemEstados.length, paginasPorEstado });
+      console.log(
+        `[perf] sync: iniciando por estado (${ordemEstados.length} UFs, ${paginasPorEstado} páginas cada). Ordem: ${ordemEstados.join(",")}`,
+      );
 
       try {
-        do {
-          let resposta;
-          try {
-            resposta = await buscarPropostasAbertas({ dataFinal, pagina }, aoTentar);
-          } catch (erro) {
-            if (importadas > 0) {
-              avisoLimite =
-                erro instanceof Error ? erro.message : "Limite do PNCP atingido.";
+        for (const uf of ordemEstados) {
+          if (pararTudo) break;
+
+          let totalNoEstado = 0;
+
+          for (let pagina = 1; pagina <= paginasPorEstado; pagina++) {
+            let resposta;
+            try {
+              resposta = await buscarPropostasAbertas(
+                { dataFinal, pagina, uf },
+                (ev) =>
+                  enviar({
+                    tipo: "tentativa",
+                    uf,
+                    pagina: ev.pagina,
+                    tentativa: ev.tentativa,
+                    maxTentativas: ev.maxTentativas,
+                    motivo: ev.motivo,
+                    esperaMs: ev.esperaMs,
+                  }),
+              );
+            } catch (erro) {
+              // PNCP esgotou as tentativas nesse estado. Se já
+              // importamos algo, encerra graciosamente com o que
+              // temos em vez de perder tudo.
+              avisoLimite = erro instanceof Error ? erro.message : "Limite do PNCP atingido.";
+              pararTudo = true;
               break;
             }
-            throw erro;
+
+            const itens = resposta.data ?? [];
+            const valores = itens
+              .map((item) => mapear(item, agora))
+              .filter((v): v is NovaLicitacao => v !== null);
+
+            if (valores.length > 0) {
+              await db
+                .insert(licitacoes)
+                .values(valores)
+                .onConflictDoUpdate({
+                  target: licitacoes.id,
+                  set: {
+                    objeto: sqlExcluded("objeto"),
+                    orgao: sqlExcluded("orgao"),
+                    cnpjOrgao: sqlExcluded("cnpj_orgao"),
+                    unidade: sqlExcluded("unidade"),
+                    municipio: sqlExcluded("municipio"),
+                    uf: sqlExcluded("uf"),
+                    esfera: sqlExcluded("esfera"),
+                    modalidadeId: sqlExcluded("modalidade_id"),
+                    modalidadeNome: sqlExcluded("modalidade_nome"),
+                    situacao: sqlExcluded("situacao"),
+                    valorEstimado: sqlExcluded("valor_estimado"),
+                    dataPublicacao: sqlExcluded("data_publicacao"),
+                    dataAberturaProposta: sqlExcluded("data_abertura_proposta"),
+                    dataEncerramentoProposta: sqlExcluded("data_encerramento_proposta"),
+                    anoCompra: sqlExcluded("ano_compra"),
+                    sequencialCompra: sqlExcluded("sequencial_compra"),
+                    srp: sqlExcluded("srp"),
+                    linkOrigem: sqlExcluded("link_origem"),
+                    categoria: sqlExcluded("categoria"),
+                    atualizadoEm: sqlExcluded("atualizado_em"),
+                  },
+                });
+              importadas += valores.length;
+              totalNoEstado += valores.length;
+            }
+
+            const totalPaginasEstado = resposta.totalPaginas ?? 0;
+
+            enviar({
+              tipo: "estado",
+              uf,
+              pagina,
+              totalPaginasEstado,
+              importadasNoEstado: totalNoEstado,
+              totalImportadas: importadas,
+              estadosConcluidos: estadosConcluidos.length,
+              totalEstados: ordemEstados.length,
+            });
+
+            // Não insiste em páginas que o próprio estado não tem
+            if (pagina >= totalPaginasEstado) break;
           }
 
-          totalPaginas = resposta.totalPaginas ?? 0;
+          if (!pararTudo) estadosConcluidos.push(uf);
+        }
 
-          const itens = resposta.data ?? [];
-          const valores = itens
-            .map((item) => mapear(item, agora))
-            .filter((v): v is NovaLicitacao => v !== null);
-
-          if (valores.length > 0) {
-            const inicioUpsert = medirInicio();
-            await db
-              .insert(licitacoes)
-              .values(valores)
-              .onConflictDoUpdate({
-                target: licitacoes.id,
-                set: {
-                  objeto: sqlExcluded("objeto"),
-                  orgao: sqlExcluded("orgao"),
-                  cnpjOrgao: sqlExcluded("cnpj_orgao"),
-                  unidade: sqlExcluded("unidade"),
-                  municipio: sqlExcluded("municipio"),
-                  uf: sqlExcluded("uf"),
-                  esfera: sqlExcluded("esfera"),
-                  modalidadeId: sqlExcluded("modalidade_id"),
-                  modalidadeNome: sqlExcluded("modalidade_nome"),
-                  situacao: sqlExcluded("situacao"),
-                  valorEstimado: sqlExcluded("valor_estimado"),
-                  dataPublicacao: sqlExcluded("data_publicacao"),
-                  dataAberturaProposta: sqlExcluded("data_abertura_proposta"),
-                  dataEncerramentoProposta: sqlExcluded(
-                    "data_encerramento_proposta",
-                  ),
-                  anoCompra: sqlExcluded("ano_compra"),
-                  sequencialCompra: sqlExcluded("sequencial_compra"),
-                  srp: sqlExcluded("srp"),
-                  linkOrigem: sqlExcluded("link_origem"),
-                  categoria: sqlExcluded("categoria"),
-                  atualizadoEm: sqlExcluded("atualizado_em"),
-                },
-              });
-            medirFim(inicioUpsert, `sync: upsert página ${pagina} (${valores.length} linhas)`);
-            importadas += valores.length;
-          }
-
-          enviar({
-            tipo: "pagina",
-            pagina,
-            totalPaginas,
-            maxPaginas,
-            importadasNaPagina: valores.length,
-            totalImportadas: importadas,
-          });
-
-          pagina++;
-        } while (pagina <= totalPaginas && pagina <= maxPaginas);
-
-        medirFim(inicioTotal, `sync: TOTAL (${importadas} licitações, ${pagina - 1} páginas)`);
+        medirFim(
+          inicioTotal,
+          `sync: TOTAL (${importadas} licitações, ${estadosConcluidos.length}/${ordemEstados.length} estados completos)`,
+        );
 
         enviar({
           tipo: "fim",
           ok: true,
           importadas,
-          paginasLidas: pagina - 1,
-          totalPaginasDisponiveis: totalPaginas,
+          estadosConcluidos: estadosConcluidos.length,
+          totalEstados: ordemEstados.length,
+          estadosFaltando: ordemEstados.filter((u) => !estadosConcluidos.includes(u)),
           aviso: avisoLimite,
         });
       } catch (erro) {
