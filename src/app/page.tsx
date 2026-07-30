@@ -17,7 +17,7 @@ import { colunasDocumentoMeta, documentos, licitacoes, perfil } from "@/db/schem
 import { garantirSeed } from "@/lib/seed";
 import { avaliarLicitacao, deduplicar } from "@/lib/match";
 import { diasAte } from "@/lib/format";
-import { medirFim, medirInicio } from "@/lib/perf";
+import { medirFim, medirInicio, comTimeout } from "@/lib/perf";
 import { comRetry } from "@/lib/retry";
 import { executarSync } from "@/lib/sync";
 import { FiltroBar } from "@/components/FiltroBar";
@@ -115,26 +115,30 @@ export default async function Home({
     cofre,
   ] = await comRetry(
     () =>
-      Promise.all([
-        db
-          .select()
-          .from(licitacoes)
-          .where(condicoes.length ? and(...condicoes.filter((c): c is SQL => c !== undefined)) : undefined)
-          .orderBy(ordem)
-          .limit(LIMITE_CONSULTA),
-        db
-          .selectDistinct({ categoria: licitacoes.categoria })
-          .from(licitacoes)
-          .orderBy(asc(licitacoes.categoria)),
-        db
-          .selectDistinct({ modalidade: licitacoes.modalidadeNome })
-          .from(licitacoes)
-          .where(isNotNull(licitacoes.modalidadeNome))
-          .orderBy(asc(licitacoes.modalidadeNome)),
-        db.select({ n: count() }).from(licitacoes),
-        db.select().from(perfil).limit(1),
-        db.select(colunasDocumentoMeta).from(documentos),
-      ]),
+      comTimeout(
+        Promise.all([
+          db
+            .select()
+            .from(licitacoes)
+            .where(condicoes.length ? and(...condicoes.filter((c): c is SQL => c !== undefined)) : undefined)
+            .orderBy(ordem)
+            .limit(LIMITE_CONSULTA),
+          db
+            .selectDistinct({ categoria: licitacoes.categoria })
+            .from(licitacoes)
+            .orderBy(asc(licitacoes.categoria)),
+          db
+            .selectDistinct({ modalidade: licitacoes.modalidadeNome })
+            .from(licitacoes)
+            .where(isNotNull(licitacoes.modalidadeNome))
+            .orderBy(asc(licitacoes.modalidadeNome)),
+          db.select({ n: count() }).from(licitacoes),
+          db.select().from(perfil).limit(1),
+          db.select(colunasDocumentoMeta).from(documentos),
+        ]),
+        15_000,
+        "dashboard: 6 consultas",
+      ),
     "dashboard: 6 consultas",
   );
   medirFim(inicioConsultas, `dashboard: 6 consultas (aba=${aba})`);
@@ -146,16 +150,26 @@ export default async function Home({
   // dado desse estado ainda" de "o filtro está quebrado".
   let distribuicaoUf: { uf: string | null; n: number }[] = [];
   if (uf && brutos.length === 0) {
-    distribuicaoUf = await db
-      .select({ uf: licitacoes.uf, n: count() })
-      .from(licitacoes)
-      .where(
-        condicoesBase.length
-          ? and(...condicoesBase.filter((c): c is SQL => c !== undefined))
-          : undefined,
-      )
-      .groupBy(licitacoes.uf)
-      .orderBy(desc(count()));
+    try {
+      distribuicaoUf = await comTimeout(
+        db
+          .select({ uf: licitacoes.uf, n: count() })
+          .from(licitacoes)
+          .where(
+            condicoesBase.length
+              ? and(...condicoesBase.filter((c): c is SQL => c !== undefined))
+              : undefined,
+          )
+          .groupBy(licitacoes.uf)
+          .orderBy(desc(count())),
+        10_000,
+        "dashboard: distribuição de UF",
+      );
+    } catch (erro) {
+      // Diagnóstico é auxiliar — se ele travar, não pode derrubar a
+      // página inteira. Loga e segue sem a informação extra.
+      console.error("[perf] diagnóstico de UF falhou (não crítico):", erro);
+    }
 
     console.log(
       `[perf] 🔍 UF "${uf}" não apareceu. Distribuição real (aba=${aba}): ` +

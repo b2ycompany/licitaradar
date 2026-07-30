@@ -33,7 +33,7 @@ function criarConexao(): Db {
 
   const cliente = postgres(url, {
     prepare: false,
-    max: 5, // menos conexões simultâneas = menos sensível a picos de instabilidade de rede
+    max: 8, // dashboard usa 6 consultas em paralelo; o comTimeout cobre qualquer travamento
     connect_timeout: 10, // segundos — falha rápido em vez de travar
     idle_timeout: 20,
     onnotice: () => {}, // silencia avisos NOTICE do Postgres no log

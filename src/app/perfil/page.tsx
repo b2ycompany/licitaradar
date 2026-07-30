@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import { colunasDocumentoMeta, documentos, perfil } from "@/db/schema";
 import { garantirSeed } from "@/lib/seed";
-import { medirFim, medirInicio } from "@/lib/perf";
+import { medirFim, medirInicio, comTimeout } from "@/lib/perf";
 import { comRetry } from "@/lib/retry";
 import { PerfilForm } from "@/components/PerfilForm";
 
@@ -21,10 +21,14 @@ export default async function PaginaPerfil() {
   const inicioConsultas = medirInicio();
   const [[dadosPerfil], cofre] = await comRetry(
     () =>
-      Promise.all([
-        db.select().from(perfil).limit(1),
-        db.select(colunasDocumentoMeta).from(documentos),
-      ]),
+      comTimeout(
+        Promise.all([
+          db.select().from(perfil).limit(1),
+          db.select(colunasDocumentoMeta).from(documentos),
+        ]),
+        15_000,
+        "perfil: 2 consultas",
+      ),
     "perfil: 2 consultas",
   );
   medirFim(inicioConsultas, "perfil: 2 consultas");

@@ -9,7 +9,7 @@ import { medirFim, medirInicio } from "@/lib/perf";
  * derrubava a página inteira na primeira tentativa.
  */
 const PADRAO_ERRO_DE_REDE =
-  /CONNECT_TIMEOUT|ETIMEDOUT|ECONNREFUSED|ECONNRESET|ENOTFOUND/i;
+  /CONNECT_TIMEOUT|ETIMEDOUT|ECONNREFUSED|ECONNRESET|ENOTFOUND|TIMEOUT_CONSULTA/i;
 
 function pareceErroDeRede(erro: unknown): boolean {
   const msg = erro instanceof Error ? `${erro.message} ${erro.name}` : String(erro);
