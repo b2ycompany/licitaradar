@@ -57,9 +57,6 @@ export default function RootLayout({
         <header className="sticky top-0 z-20 border-b-2 border-tinta bg-papel/95 backdrop-blur">
           <div className="flex w-full flex-wrap items-center justify-between gap-4 px-4 py-5 sm:px-6 lg:px-10 xl:px-16">
             <div>
-              <p className="font-mono text-xs uppercase tracking-[0.2em] text-verde">
-                Lei 14.133/2021 · Dados abertos do PNCP
-              </p>
               <h1 className="text-3xl font-extrabold tracking-tight">
                 <Link href="/">
                   Licita<span className="text-verde">Radar</span>

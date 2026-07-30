@@ -132,6 +132,15 @@ export function LicitacaoCard({
             </span>
           </div>
 
+          {avaliacao.alertas.length > 0 && (
+            <p className="mt-2 text-xs font-semibold text-ambar">
+              ⚠ {avaliacao.alertas.join(" ")}{" "}
+              <a href="/perfil" className="underline underline-offset-2">
+                preencher agora
+              </a>
+            </p>
+          )}
+
           {pendencias.length > 0 && avaliacao.fase !== "encerrada" && (
             <p className="mt-2 text-xs text-ambar">
               Para participar, falta:{" "}

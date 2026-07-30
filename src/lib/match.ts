@@ -24,6 +24,7 @@ export interface Avaliacao {
   docsFaltando: DocumentoPadrao[];
   docsVencidos: DocumentoPadrao[];
   motivos: string[];
+  alertas: string[];
 }
 
 export function faseDaLicitacao(l: Licitacao, agora = new Date()): Fase {
@@ -102,31 +103,27 @@ export function avaliarLicitacao(
   const ufs = perfilEmpresa ? parseJsonArray(perfilEmpresa.ufs) : [];
 
   const motivos: string[] = [];
+  const alertasPerfil: string[] = [];
   let score = 0;
 
-  // Categoria (35)
-  if (categorias.length === 0) {
-    score += 17;
-  } else if (categorias.includes(l.categoria)) {
+  // Categoria (35) — sem categoria marcada no perfil, não pontua.
+  // Um perfil vazio não deve parecer "meio compatível" com tudo.
+  if (categorias.length > 0 && categorias.includes(l.categoria)) {
     score += 35;
     motivos.push(`Área de interesse: ${l.categoria}`);
   }
 
-  // UF (15)
-  if (ufs.length === 0) {
-    score += 8;
-  } else if (l.uf && ufs.includes(l.uf)) {
+  // UF (15) — mesma lógica: sem região marcada, zero.
+  if (ufs.length > 0 && l.uf && ufs.includes(l.uf)) {
     score += 15;
     motivos.push(`Região de atuação: ${l.uf}`);
   }
 
-  // Faixa de valor (15)
+  // Faixa de valor (15) — mesma lógica: sem faixa definida, zero.
   const valor = l.valorEstimado ?? 0;
   const min = perfilEmpresa?.valorMin ?? null;
   const max = perfilEmpresa?.valorMax ?? null;
-  if (min === null && max === null) {
-    score += 8;
-  } else {
+  if (min !== null || max !== null) {
     const acimaDoMin = min === null || valor >= min;
     const abaixoDoMax = max === null || (valor > 0 && valor <= max);
     if (acimaDoMin && abaixoDoMax) {
@@ -135,10 +132,15 @@ export function avaliarLicitacao(
     }
   }
 
-  // Documentos (35)
+  // Documentos (35) — já é 100% real: cobertura de verdade do
+  // cofre contra os documentos estimados do edital.
   score += Math.round(35 * cobertura);
-  if (docsFaltando.length === 0 && docsVencidos.length === 0) {
+  if (docsExigidos.length > 0 && docsFaltando.length === 0 && docsVencidos.length === 0) {
     motivos.push("Documentação estimada completa");
+  }
+
+  if (categorias.length === 0 && ufs.length === 0 && min === null && max === null) {
+    alertasPerfil.push("Perfil incompleto — preencha área, região e faixa de valor para uma aderência real");
   }
 
   const apta =
@@ -154,6 +156,7 @@ export function avaliarLicitacao(
     docsFaltando,
     docsVencidos,
     motivos,
+    alertas: alertasPerfil,
   };
 }
 
