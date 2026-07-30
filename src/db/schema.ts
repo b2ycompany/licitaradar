@@ -58,6 +58,8 @@ export const perfil = pgTable("perfil", {
   categorias: text("categorias").notNull().default("[]"),
   valorMin: doublePrecision("valor_min"),
   valorMax: doublePrecision("valor_max"),
+  ultimoSyncEm: text("ultimo_sync_em"),
+  syncEmAndamentoDesde: text("sync_em_andamento_desde"),
   atualizadoEm: text("atualizado_em").notNull(),
 });
 

@@ -40,7 +40,7 @@ export function SyncButton() {
     setErro(null);
 
     try {
-      const res = await fetch("/api/sync?paginasPorEstado=2", { method: "POST" });
+      const res = await fetch("/api/sync?paginasPorEstado=3", { method: "POST" });
 
       if (!res.body) {
         const dados = (await res.json()) as { ok: boolean; importadas?: number; erro?: string };
@@ -93,6 +93,10 @@ export function SyncButton() {
           } else if (evento.tipo === "fim") {
             setCarregando(false);
             if (evento.ok) {
+              if (evento.jaEmAndamento) {
+                setErro("Já existe uma sincronização em segundo plano rodando — aguarde alguns minutos e tente de novo.");
+                break leitura;
+              }
               setConcluido({
                 importadas: (evento.importadas as number) ?? 0,
                 estadosConcluidos: (evento.estadosConcluidos as number) ?? 0,

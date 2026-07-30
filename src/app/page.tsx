@@ -11,6 +11,7 @@ import {
   or,
   type SQL,
 } from "drizzle-orm";
+import { after } from "next/server";
 import { db } from "@/db";
 import { colunasDocumentoMeta, documentos, licitacoes, perfil } from "@/db/schema";
 import { garantirSeed } from "@/lib/seed";
@@ -18,6 +19,7 @@ import { avaliarLicitacao, deduplicar } from "@/lib/match";
 import { diasAte } from "@/lib/format";
 import { medirFim, medirInicio } from "@/lib/perf";
 import { comRetry } from "@/lib/retry";
+import { executarSync } from "@/lib/sync";
 import { FiltroBar } from "@/components/FiltroBar";
 import { StatsCards } from "@/components/StatsCards";
 import { LicitacaoCard } from "@/components/LicitacaoCard";
@@ -25,8 +27,16 @@ import { LicitacaoCard } from "@/components/LicitacaoCard";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const LIMITE_CONSULTA = 500;
-const LIMITE_EXIBICAO = 80;
+// Sem limite artificial baixo: até 5.000 linhas avaliadas por
+// carregamento (a exibição continua paginada em 120 por vez, mas
+// nada fica escondido silenciosamente por um teto pequeno).
+const LIMITE_CONSULTA = 5000;
+const LIMITE_EXIBICAO = 120;
+
+// Se a última sincronização passou disso, uma nova é disparada
+// sozinha em segundo plano ao visitar o dashboard — o usuário não
+// precisa clicar em nada para os dados ficarem frescos.
+const MINUTOS_PARA_AUTO_SYNC = 20;
 
 type Busca = Record<string, string | string[] | undefined>;
 
@@ -43,7 +53,7 @@ export default async function Home({
 
   const params = await searchParams;
 
-  const aba = valorUnico(params.aba) ?? "abertas";
+  const aba = valorUnico(params.aba) ?? "todas";
   const uf = valorUnico(params.uf);
   const categoria = valorUnico(params.categoria);
   const modalidade = valorUnico(params.modalidade);
@@ -157,6 +167,27 @@ export default async function Home({
 
   const perfilEmpresa = perfilLinhas[0] ?? null;
 
+  // Sincronização automática e transparente: se a última vez que
+  // importamos dados do PNCP foi há mais de MINUTOS_PARA_AUTO_SYNC,
+  // dispara uma atualização em segundo plano com after() — a
+  // página já responde com o que tem agora; quando o usuário
+  // voltar (ou recarregar), os dados novos já estarão lá.
+  const ultimoSync = perfilEmpresa?.ultimoSyncEm ? new Date(perfilEmpresa.ultimoSyncEm) : null;
+  const minutosDesdeUltimoSync = ultimoSync
+    ? (agora.getTime() - ultimoSync.getTime()) / 60000
+    : Infinity;
+
+  if (minutosDesdeUltimoSync > MINUTOS_PARA_AUTO_SYNC) {
+    after(async () => {
+      console.log(`[perf] 🔄 auto-sync em segundo plano (última há ${Math.round(minutosDesdeUltimoSync)}min)`);
+      try {
+        await executarSync({ paginasPorEstado: 3 });
+      } catch (erro) {
+        console.error("[perf] auto-sync falhou:", erro);
+      }
+    });
+  }
+
   // Remove editais publicados em duplicidade (mesmo órgão + objeto)
   const semDuplicatas = deduplicar(brutos);
 
@@ -202,6 +233,17 @@ export default async function Home({
         modalidades={modalidadesDisponiveis}
       />
 
+      <p className="mb-4 font-mono text-xs text-cinza">
+        {ultimoSync ? (
+          <>
+            Última sincronização: {ultimoSync.toLocaleString("pt-BR")}
+            {minutosDesdeUltimoSync > MINUTOS_PARA_AUTO_SYNC && " · atualizando em segundo plano agora…"}
+          </>
+        ) : (
+          "Ainda sem sincronização — busca automática iniciando em segundo plano…"
+        )}
+      </p>
+
       <StatsCards
         total={avaliadas.length}
         valorTotal={valorTotal}
@@ -211,12 +253,12 @@ export default async function Home({
 
       {totalNoBanco === 0 ? (
         <div className="rounded-xl border-2 border-dashed border-verde bg-white px-6 py-16 text-center">
-          <p className="text-2xl font-extrabold">Comece importando as licitações</p>
+          <p className="text-2xl font-extrabold">Buscando as primeiras licitações…</p>
           <p className="mx-auto mt-2 max-w-xl text-base text-cinza">
-            Seu banco ainda está vazio. Clique no botão{" "}
-            <strong className="text-verde">Sincronizar PNCP</strong> (canto
-            superior direito) para trazer as licitações com propostas em aberto
-            de todo o país. Leva alguns segundos.
+            Seu banco ainda está vazio, mas a sincronização automática já foi
+            disparada em segundo plano. Recarregue a página em cerca de 1
+            minuto — ou clique em <strong className="text-verde">Sincronizar PNCP</strong>{" "}
+            (canto superior direito) para acompanhar ao vivo.
           </p>
           <p className="mt-6 font-mono text-xs uppercase tracking-wide text-cinza">
             Dica: depois, preencha o “Meu perfil” para o radar destacar em verde
@@ -255,7 +297,7 @@ export default async function Home({
             )}
           </p>
           <a
-            href={soAptas ? "/?aba=abertas" : "/"}
+            href="/"
             className="mt-5 inline-block rounded-md border-2 border-tinta px-4 py-2 text-sm font-semibold hover:bg-tinta hover:text-papel"
           >
             Limpar filtros

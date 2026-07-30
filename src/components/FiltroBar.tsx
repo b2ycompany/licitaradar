@@ -10,8 +10,8 @@ const UFS = [
 ];
 
 const ABAS = [
-  { valor: "abertas", rotulo: "Propostas abertas" },
   { valor: "todas", rotulo: "Todas" },
+  { valor: "abertas", rotulo: "Propostas abertas" },
   { valor: "favoritas", rotulo: "Favoritas" },
   { valor: "acompanhando", rotulo: "Acompanhando" },
 ];
@@ -41,7 +41,7 @@ export function FiltroBar({ categorias, modalidades }: Props) {
     router.replace(query ? `/?${query}` : "/", { scroll: false });
   }
 
-  const abaAtiva = params.get("aba") ?? "abertas";
+  const abaAtiva = params.get("aba") ?? "todas";
   const soAptas = params.get("aptas") === "1";
 
   const selectClasses =
