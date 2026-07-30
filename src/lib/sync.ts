@@ -330,10 +330,12 @@ export async function executarSync(opcoes: {
   }
 
   // ComprasNet legado — fonte DIFERENTE do PNCP (Lei 8.666/10.520,
-  // processos de transição). Antes de importar, cruza com o que já
-  // existe do PNCP (mesmo CNPJ do órgão + objeto parecido) — só
-  // entra o que NÃO está duplicado.
-  if (!pararTudo) {
+  // processos de transição). Roda mesmo que o PNCP tenha parado
+  // cedo (rate-limit) — são APIs independentes, uma travar não deve
+  // impedir a outra. Antes de importar, cruza com o que já existe
+  // do PNCP (mesmo CNPJ do órgão + objeto parecido) — só entra o
+  // que NÃO está duplicado.
+  {
     try {
       // Carrega uma vez as chaves do PNCP para comparar em memória,
       // em vez de 1 consulta por item do ComprasNet.

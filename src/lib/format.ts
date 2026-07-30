@@ -19,12 +19,18 @@ export function formatarValorCompacto(valor: number): string {
   return formatarValor(valor);
 }
 
-/** Formata uma data ISO como dd/mm/aaaa hh:mm. */
+/**
+ * Formata uma data ISO como dd/mm/aaaa hh:mm, sempre no horário de
+ * Brasília — sem isso, o servidor da Vercel roda em UTC e todo
+ * prazo de proposta aparecia 3 horas adiantado (ex.: "17:00"
+ * quando o prazo real era 14:00).
+ */
 export function formatarData(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

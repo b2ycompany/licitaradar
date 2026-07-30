@@ -9,7 +9,10 @@ import { SyncButton } from "@/components/SyncButton";
 // existe. Se o título não mudar entre dois carregamentos, é cache
 // de verdade, sem qualquer dúvida possível.
 export async function generateMetadata(): Promise<Metadata> {
-  const agora = new Date().toLocaleString("pt-BR", { timeStyle: "medium" });
+  const agora = new Date().toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    timeStyle: "medium",
+  });
   return {
     title: `LicitaRadar [${agora}]`,
     description:
@@ -31,6 +34,7 @@ export default function RootLayout({
   // servida de algum cache — prova definitiva, visível, que
   // nenhuma ferramenta de leitura consegue esconder.
   const renderizadoEm = new Date().toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
     dateStyle: "short",
     timeStyle: "medium",
   });

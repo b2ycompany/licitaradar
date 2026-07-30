@@ -263,7 +263,7 @@ export default async function Home({
       <p className="mb-4 font-mono text-xs text-cinza">
         {ultimoSync ? (
           <>
-            Última sincronização: {ultimoSync.toLocaleString("pt-BR")}
+            Última sincronização: {ultimoSync.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
             {minutosDesdeUltimoSync > MINUTOS_PARA_AUTO_SYNC && " · atualizando em segundo plano agora…"}
           </>
         ) : (
