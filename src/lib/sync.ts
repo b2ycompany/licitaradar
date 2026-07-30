@@ -224,6 +224,86 @@ export async function executarSync(opcoes: {
 
     if (!pararTudo) estadosConcluidos.push(uf);
   }
+
+  // Varredura nacional extra, SEM filtro de UF — pega órgãos
+  // federais e entidades cuja unidade não se encaixa bem numa
+  // única UF (ex.: bancos públicos federais, autarquias com
+  // jurisdição nacional). O sync por estado sozinho pode deixar
+  // esse tipo de caso de fora.
+  if (!pararTudo) {
+    for (let pagina = 1; pagina <= paginasPorEstado; pagina++) {
+      let resposta;
+      try {
+        resposta = await buscarPropostasAbertas(
+          { dataFinal, pagina },
+          (ev: EventoTentativa) =>
+            aoEvento({
+              tipo: "tentativa",
+              uf: "BR (nacional)",
+              pagina: ev.pagina,
+              tentativa: ev.tentativa,
+              maxTentativas: ev.maxTentativas,
+              motivo: ev.motivo,
+              esperaMs: ev.esperaMs,
+            }),
+        );
+      } catch {
+        break; // varredura nacional é um extra — se falhar, não é motivo pra marcar aviso
+      }
+
+      const itens = resposta.data ?? [];
+      const valores = itens
+        .map((item) => mapear(item, agora))
+        .filter((v): v is NovaLicitacao => v !== null);
+
+      if (valores.length > 0) {
+        await db
+          .insert(licitacoes)
+          .values(valores)
+          .onConflictDoUpdate({
+            target: licitacoes.id,
+            set: {
+              objeto: sqlExcluded("objeto"),
+              orgao: sqlExcluded("orgao"),
+              cnpjOrgao: sqlExcluded("cnpj_orgao"),
+              unidade: sqlExcluded("unidade"),
+              municipio: sqlExcluded("municipio"),
+              uf: sqlExcluded("uf"),
+              esfera: sqlExcluded("esfera"),
+              modalidadeId: sqlExcluded("modalidade_id"),
+              modalidadeNome: sqlExcluded("modalidade_nome"),
+              situacao: sqlExcluded("situacao"),
+              valorEstimado: sqlExcluded("valor_estimado"),
+              dataPublicacao: sqlExcluded("data_publicacao"),
+              dataAberturaProposta: sqlExcluded("data_abertura_proposta"),
+              dataEncerramentoProposta: sqlExcluded("data_encerramento_proposta"),
+              anoCompra: sqlExcluded("ano_compra"),
+              sequencialCompra: sqlExcluded("sequencial_compra"),
+              srp: sqlExcluded("srp"),
+              linkOrigem: sqlExcluded("link_origem"),
+              categoria: sqlExcluded("categoria"),
+              atualizadoEm: sqlExcluded("atualizado_em"),
+            },
+          });
+        importadas += valores.length;
+      }
+
+      const totalPaginasNacional = resposta.totalPaginas ?? 0;
+
+      aoEvento({
+        tipo: "estado",
+        uf: "BR (nacional)",
+        pagina,
+        totalPaginasEstado: totalPaginasNacional,
+        importadasNoEstado: valores.length,
+        totalImportadas: importadas,
+        estadosConcluidos: estadosConcluidos.length,
+        totalEstados: ordemEstados.length,
+      });
+
+      if (pagina >= totalPaginasNacional) break;
+    }
+  }
   } finally {
     // Libera a trava e registra quando terminou — SEMPRE, mesmo em
     // caso de erro, para nunca deixar o sistema travado achando

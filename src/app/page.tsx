@@ -21,6 +21,7 @@ import { medirFim, medirInicio, comTimeout } from "@/lib/perf";
 import { comRetry } from "@/lib/retry";
 import { executarSync } from "@/lib/sync";
 import { FiltroBar } from "@/components/FiltroBar";
+import { FaseBadges } from "@/components/FaseBadges";
 import { StatsCards } from "@/components/StatsCards";
 import { LicitacaoCard } from "@/components/LicitacaoCard";
 
@@ -229,6 +230,16 @@ export default async function Home({
   }).length;
   const aptas = avaliadas.filter((a) => a.avaliacao.apta).length;
 
+  // Contagem por fase — a pergunta mais básica: quantas eu posso
+  // disputar agora vs. quantas já venceram.
+  const contagemFase = {
+    abertas: avaliadas.filter((a) => a.avaliacao.fase === "recebendo").length,
+    emAndamento: avaliadas.filter((a) => a.avaliacao.fase === "aguardando").length,
+    encerradas: avaliadas.filter(
+      (a) => a.avaliacao.fase === "encerrada" || a.avaliacao.fase === "indefinida",
+    ).length,
+  };
+
   const categoriasDisponiveis = categoriasLinhas.map((r) => r.categoria);
   const modalidadesDisponiveis = modalidadesLinhas
     .map((r) => r.modalidade)
@@ -257,6 +268,12 @@ export default async function Home({
           "Ainda sem sincronização — busca automática iniciando em segundo plano…"
         )}
       </p>
+
+      <FaseBadges
+        abertas={contagemFase.abertas}
+        emAndamento={contagemFase.emAndamento}
+        encerradas={contagemFase.encerradas}
+      />
 
       <StatsCards
         total={avaliadas.length}
