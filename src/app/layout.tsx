@@ -3,11 +3,19 @@ import Link from "next/link";
 import "./globals.css";
 import { SyncButton } from "@/components/SyncButton";
 
-export const metadata: Metadata = {
-  title: "LicitaRadar — radar de licitações públicas",
-  description:
-    "Dashboard de prospecção de licitações públicas com dados do PNCP: valores, estados, categorias, prazos e match de documentos.",
-};
+// generateMetadata (em vez do objeto estático `metadata`) roda de
+// novo a cada request em páginas dinâmicas — coloca a hora do
+// servidor dentro do próprio <title>, o metadado mais básico que
+// existe. Se o título não mudar entre dois carregamentos, é cache
+// de verdade, sem qualquer dúvida possível.
+export async function generateMetadata(): Promise<Metadata> {
+  const agora = new Date().toLocaleString("pt-BR", { timeStyle: "medium" });
+  return {
+    title: `LicitaRadar [${agora}]`,
+    description:
+      "Dashboard de prospecção de licitações públicas com dados do PNCP: valores, estados, categorias, prazos e match de documentos.",
+  };
+}
 
 // Reforço: garante que o layout raiz também nunca seja tratado
 // como estático/cacheável, mesmo que uma página filha mude no
