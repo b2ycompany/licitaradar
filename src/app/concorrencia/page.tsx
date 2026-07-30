@@ -5,6 +5,7 @@ import { calcularEstatisticas, calcularIndiceCompetitividade } from "@/lib/conco
 import { ConcorrenciaPainel } from "@/components/ConcorrenciaPainel";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 type Busca = Record<string, string | string[] | undefined>;
 

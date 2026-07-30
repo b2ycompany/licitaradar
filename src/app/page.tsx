@@ -23,6 +23,7 @@ import { StatsCards } from "@/components/StatsCards";
 import { LicitacaoCard } from "@/components/LicitacaoCard";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const LIMITE_CONSULTA = 500;
 const LIMITE_EXIBICAO = 80;

@@ -6,6 +6,7 @@ import { comRetry } from "@/lib/retry";
 import { PerfilForm } from "@/components/PerfilForm";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 /**
  * Onboarding da empresa: áreas de interesse, regiões, faixa de
