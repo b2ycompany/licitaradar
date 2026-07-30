@@ -9,9 +9,24 @@ export const metadata: Metadata = {
     "Dashboard de prospecção de licitações públicas com dados do PNCP: valores, estados, categorias, prazos e match de documentos.",
 };
 
+// Reforço: garante que o layout raiz também nunca seja tratado
+// como estático/cacheável, mesmo que uma página filha mude no
+// futuro e "esqueça" de forçar isso sozinha.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  // Carimbo de hora renderizado no servidor a cada request. Se essa
+  // hora não mudar entre dois carregamentos, a página está sendo
+  // servida de algum cache — prova definitiva, visível, que
+  // nenhuma ferramenta de leitura consegue esconder.
+  const renderizadoEm = new Date().toLocaleString("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "medium",
+  });
+
   return (
     <html lang="pt-BR">
       <head>
@@ -38,6 +53,9 @@ export default function RootLayout({
                   Licita<span className="text-verde">Radar</span>
                 </Link>
               </h1>
+              <p className="font-mono text-xs font-bold text-ambar">
+                Página renderizada em: {renderizadoEm}
+              </p>
             </div>
             <nav className="flex items-center gap-5">
               <Link
