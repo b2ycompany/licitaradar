@@ -11,6 +11,14 @@ import {
 import { categorizar } from "@/lib/categorize";
 import { medirFim, medirInicio } from "@/lib/perf";
 import { PERFIL_ID } from "@/lib/seed";
+import {
+  buscarLicitacoesComprasNet,
+  extrairIdUnico,
+  extrairMunicipio,
+  extrairObjeto,
+  extrairOrgao,
+  extrairUf,
+} from "@/lib/comprasnet";
 
 /**
  * Lógica central de sincronização — estado por estado, ordem
@@ -73,6 +81,22 @@ function mapear(c: PncpContratacao, agora: string): NovaLicitacao | null {
 
 function sqlExcluded(coluna: string) {
   return sql.raw(`excluded."${coluna}"`);
+}
+
+/** Normaliza texto para comparação entre fontes diferentes (remove
+ * acento, caixa, pontuação, e corta em 100 caracteres — o
+ * suficiente pra identificar "é o mesmo objeto" sem exigir
+ * igualdade perfeita, já que PNCP e ComprasNet nunca escrevem o
+ * objeto exatamente igual). */
+function normalizarObjeto(texto: string): string {
+  return texto
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 100);
 }
 
 export interface ResultadoSync {
@@ -302,6 +326,120 @@ export async function executarSync(opcoes: {
       });
 
       if (pagina >= totalPaginasNacional) break;
+    }
+  }
+
+  // ComprasNet legado — fonte DIFERENTE do PNCP (Lei 8.666/10.520,
+  // processos de transição). Antes de importar, cruza com o que já
+  // existe do PNCP (mesmo CNPJ do órgão + objeto parecido) — só
+  // entra o que NÃO está duplicado.
+  if (!pararTudo) {
+    try {
+      // Carrega uma vez as chaves do PNCP para comparar em memória,
+      // em vez de 1 consulta por item do ComprasNet.
+      const existentesPncp = await db
+        .select({ cnpjOrgao: licitacoes.cnpjOrgao, objeto: licitacoes.objeto })
+        .from(licitacoes)
+        .where(eq(licitacoes.fonte, "pncp"));
+
+      const chavesPncp = new Set(
+        existentesPncp
+          .filter((l) => l.cnpjOrgao)
+          .map((l) => `${l.cnpjOrgao}|${normalizarObjeto(l.objeto)}`),
+      );
+
+      let offset = 0;
+      const PAGINA_COMPRASNET = 500;
+      let importadasComprasnet = 0;
+      let duplicadasIgnoradas = 0;
+
+      for (let tentativaPagina = 0; tentativaPagina < paginasPorEstado; tentativaPagina++) {
+        let itens: Awaited<ReturnType<typeof buscarLicitacoesComprasNet>>;
+        try {
+          itens = await buscarLicitacoesComprasNet({ diasRecentes: 30, offset });
+        } catch (erro) {
+          console.log(
+            `[perf] 🟡 ComprasNet: ${erro instanceof Error ? erro.message : "falhou"} — pulando essa fonte`,
+          );
+          break;
+        }
+
+        if (itens.length === 0) break;
+
+        const valoresNovos: NovaLicitacao[] = [];
+
+        for (const item of itens) {
+          const idUnico = extrairIdUnico(item);
+          const objeto = extrairObjeto(item);
+          const orgaoNome = extrairOrgao(item);
+          if (!idUnico || !objeto) continue;
+
+          // Sem CNPJ do órgão nessa API por padrão — o dedup aqui é
+          // por nome do órgão + objeto normalizado (mais fraco que
+          // CNPJ, mas evita a maioria das duplicatas óbvias).
+          const chave = `${orgaoNome.toLowerCase().trim()}|${normalizarObjeto(objeto)}`;
+          const duplicataProvavel = [...chavesPncp].some((c) => c.endsWith(`|${normalizarObjeto(objeto)}`));
+
+          if (duplicataProvavel) {
+            duplicadasIgnoradas++;
+            continue;
+          }
+
+          valoresNovos.push({
+            id: idUnico,
+            fonte: "comprasnet",
+            objeto,
+            orgao: orgaoNome,
+            cnpjOrgao: null,
+            unidade: null,
+            municipio: extrairMunicipio(item),
+            uf: extrairUf(item),
+            esfera: "Federal",
+            modalidadeId: null,
+            modalidadeNome: item.modalidade ?? item.ds_modalidade ?? null,
+            situacao: item.situacao ?? null,
+            valorEstimado: item.valor_estimado ?? null,
+            dataPublicacao: null,
+            dataAberturaProposta: item.dt_abertura_proposta ?? item.data_abertura_proposta ?? null,
+            dataEncerramentoProposta: item.dt_abertura_proposta ?? item.data_abertura_proposta ?? null,
+            anoCompra: null,
+            sequencialCompra: null,
+            srp: false,
+            linkOrigem: null,
+            categoria: categorizar(objeto),
+            criadoEm: agora,
+            atualizadoEm: agora,
+          });
+
+          chavesPncp.add(chave); // evita duplicar entre si dentro do próprio ComprasNet
+        }
+
+        if (valoresNovos.length > 0) {
+          await db.insert(licitacoes).values(valoresNovos).onConflictDoNothing();
+          importadasComprasnet += valoresNovos.length;
+          importadas += valoresNovos.length;
+        }
+
+        aoEvento({
+          tipo: "estado",
+          uf: "ComprasNet",
+          pagina: tentativaPagina + 1,
+          totalPaginasEstado: paginasPorEstado,
+          importadasNoEstado: importadasComprasnet,
+          totalImportadas: importadas,
+          estadosConcluidos: estadosConcluidos.length,
+          totalEstados: ordemEstados.length,
+        });
+
+        offset += PAGINA_COMPRASNET;
+        if (itens.length < PAGINA_COMPRASNET) break;
+      }
+
+      console.log(
+        `[perf] ComprasNet: ${importadasComprasnet} novas, ${duplicadasIgnoradas} ignoradas por já existirem no PNCP`,
+      );
+    } catch (erro) {
+      console.log(`[perf] 🟡 ComprasNet indisponível: ${erro instanceof Error ? erro.message : erro}`);
     }
   }
   } finally {

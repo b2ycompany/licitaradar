@@ -24,6 +24,7 @@ import { FiltroBar } from "@/components/FiltroBar";
 import { FaseBadges } from "@/components/FaseBadges";
 import { StatsCards } from "@/components/StatsCards";
 import { LicitacaoCard } from "@/components/LicitacaoCard";
+import { LimparFiltrosAoRecarregar } from "@/components/LimparFiltrosAoRecarregar";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -253,6 +254,7 @@ export default async function Home({
 
   return (
     <>
+      <LimparFiltrosAoRecarregar />
       <FiltroBar
         categorias={categoriasDisponiveis}
         modalidades={modalidadesDisponiveis}

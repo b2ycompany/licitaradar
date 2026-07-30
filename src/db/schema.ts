@@ -22,6 +22,7 @@ const bytea = customType<{ data: Buffer }>({
  */
 export const licitacoes = pgTable("licitacoes", {
   id: text("id").primaryKey(),
+  fonte: text("fonte").notNull().default("pncp"), // "pncp" | "comprasnet"
   objeto: text("objeto").notNull(),
   orgao: text("orgao").notNull().default(""),
   cnpjOrgao: text("cnpj_orgao"),

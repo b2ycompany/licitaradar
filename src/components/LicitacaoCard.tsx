@@ -106,6 +106,7 @@ export function LicitacaoCard({
             {licitacao.modalidadeNome ?? "Modalidade não informada"}
             {licitacao.srp ? " · Registro de preços" : ""}
             {licitacao.situacao ? ` · ${licitacao.situacao}` : ""}
+            {licitacao.fonte === "comprasnet" ? " · Fonte: ComprasNet" : ""}
           </p>
 
           <h3 className="mt-1 line-clamp-3 text-sm font-semibold leading-snug">
