@@ -3,6 +3,7 @@ import Link from "next/link";
 import "./globals.css";
 import { SyncButton } from "@/components/SyncButton";
 import { LogoutButton } from "@/components/LogoutButton";
+import { SplashScreen } from "@/components/SplashScreen";
 import { obterUsuarioAtual } from "@/lib/auth";
 
 // generateMetadata (em vez do objeto estático `metadata`) roda de
@@ -59,6 +60,7 @@ export default async function RootLayout({
         />
       </head>
       <body className="flex min-h-screen flex-col">
+        <SplashScreen />
         <header className="sticky top-0 z-20 border-b-2 border-tinta bg-papel/95 backdrop-blur">
           <div className="flex w-full flex-wrap items-center justify-between gap-4 px-4 py-5 sm:px-6 lg:px-10 xl:px-16">
             <div>
