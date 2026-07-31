@@ -48,6 +48,19 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const rotaPublica = ROTAS_PUBLICAS.some((r) => request.nextUrl.pathname.startsWith(r));
+  const rotaDeApi = request.nextUrl.pathname.startsWith("/api/");
+
+  // Rotas de API nunca são redirecionadas — elas respondem em JSON,
+  // mesmo quando barram por falta de login (senão um fetch() que
+  // esperava JSON recebe a página de login em HTML e quebra, como
+  // aconteceu no cadastro).
+  if (rotaDeApi) {
+    resposta.headers.set(
+      "Cache-Control",
+      "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+    );
+    return resposta;
+  }
 
   if (!user && !rotaPublica) {
     const url = request.nextUrl.clone();
