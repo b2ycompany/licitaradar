@@ -9,6 +9,8 @@
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.47.10",
     "drizzle-orm": "^0.38.4",
     "next": "^15.1.6",
     "postgres": "^3.4.5",

@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { contratosVencedores, perfil } from "@/db/schema";
+import { exigirUsuarioAprovado } from "@/lib/auth";
 import { calcularEstatisticas, calcularIndiceCompetitividade } from "@/lib/concorrencia";
 import { ConcorrenciaPainel } from "@/components/ConcorrenciaPainel";
 
@@ -14,6 +15,8 @@ export default async function PaginaConcorrencia({
 }: {
   searchParams: Promise<Busca>;
 }) {
+  await exigirUsuarioAprovado();
+
   const params = await searchParams;
   const cnpjOrgao = typeof params.cnpj === "string" ? params.cnpj : "";
   const orgaoNome = typeof params.nome === "string" ? params.nome : "este órgão";

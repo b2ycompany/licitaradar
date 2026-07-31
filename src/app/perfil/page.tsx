@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import { colunasDocumentoMeta, documentos, perfil } from "@/db/schema";
+import { exigirUsuarioAprovado } from "@/lib/auth";
 import { garantirSeed } from "@/lib/seed";
 import { medirFim, medirInicio, comTimeout } from "@/lib/perf";
 import { comRetry } from "@/lib/retry";
@@ -15,6 +16,8 @@ export const revalidate = 0;
  */
 export default async function PaginaPerfil() {
   const inicioTotal = medirInicio();
+
+  await exigirUsuarioAprovado();
 
   await garantirSeed();
 

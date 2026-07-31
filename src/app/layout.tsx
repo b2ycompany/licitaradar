@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
 import { SyncButton } from "@/components/SyncButton";
+import { LogoutButton } from "@/components/LogoutButton";
+import { obterUsuarioAtual } from "@/lib/auth";
 
 // generateMetadata (em vez do objeto estático `metadata`) roda de
 // novo a cada request em páginas dinâmicas — coloca a hora do
@@ -26,7 +28,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   // Carimbo de hora renderizado no servidor a cada request. Se essa
@@ -38,6 +40,9 @@ export default function RootLayout({
     dateStyle: "short",
     timeStyle: "medium",
   });
+
+  const atual = await obterUsuarioAtual();
+  const aprovado = atual?.usuario?.status === "aprovado";
 
   return (
     <html lang="pt-BR">
@@ -66,21 +71,35 @@ export default function RootLayout({
                 Página renderizada em: {renderizadoEm}
               </p>
             </div>
-            <nav className="flex items-center gap-5">
-              <Link
-                href="/"
-                className="text-base font-semibold hover:text-verde focus-visible:outline focus-visible:outline-2 focus-visible:outline-verde"
-              >
-                Dashboard
-              </Link>
-              <Link
-                href="/perfil"
-                className="text-base font-semibold hover:text-verde focus-visible:outline focus-visible:outline-2 focus-visible:outline-verde"
-              >
-                Meu perfil
-              </Link>
-              <SyncButton />
-            </nav>
+            {aprovado && (
+              <nav className="flex flex-wrap items-center gap-5">
+                <Link
+                  href="/"
+                  className="text-base font-semibold hover:text-verde focus-visible:outline focus-visible:outline-2 focus-visible:outline-verde"
+                >
+                  Dashboard
+                </Link>
+                <Link
+                  href="/perfil"
+                  className="text-base font-semibold hover:text-verde focus-visible:outline focus-visible:outline-2 focus-visible:outline-verde"
+                >
+                  Meu perfil
+                </Link>
+                {atual?.usuario?.isAdmin && (
+                  <Link
+                    href="/admin/usuarios"
+                    className="text-base font-semibold text-verde hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-verde"
+                  >
+                    Admin
+                  </Link>
+                )}
+                <SyncButton />
+                <div className="flex flex-col items-end gap-0.5">
+                  <span className="font-mono text-xs text-cinza">{atual?.email}</span>
+                  <LogoutButton />
+                </div>
+              </nav>
+            )}
           </div>
         </header>
         <main className="w-full flex-1 px-4 py-8 sm:px-6 lg:px-10 xl:px-16">

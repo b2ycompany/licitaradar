@@ -20,6 +20,7 @@ import { diasAte } from "@/lib/format";
 import { medirFim, medirInicio, comTimeout } from "@/lib/perf";
 import { comRetry } from "@/lib/retry";
 import { executarSync } from "@/lib/sync";
+import { exigirUsuarioAprovado } from "@/lib/auth";
 import { FiltroBar } from "@/components/FiltroBar";
 import { FaseBadges } from "@/components/FaseBadges";
 import { StatsCards } from "@/components/StatsCards";
@@ -52,6 +53,8 @@ export default async function Home({
   searchParams: Promise<Busca>;
 }) {
   const inicioTotal = medirInicio();
+
+  await exigirUsuarioAprovado();
 
   const params = await searchParams;
 

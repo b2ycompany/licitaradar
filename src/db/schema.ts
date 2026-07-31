@@ -92,6 +92,25 @@ export type Perfil = typeof perfil.$inferSelect;
 export type Documento = typeof documentos.$inferSelect;
 
 /**
+ * Usuários da plataforma. `id` é o mesmo UUID do Supabase Auth
+ * (auth.users.id) — a senha em si fica só no Supabase Auth, aqui
+ * guardamos só o controle de acesso (aprovado/pendente, admin ou
+ * não).
+ */
+export const usuarios = pgTable("usuarios", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  status: text("status").notNull().default("pendente"), // pendente | aprovado | rejeitado
+  isAdmin: boolean("is_admin").notNull().default(false),
+  criadoEm: text("criado_em").notNull(),
+  aprovadoEm: text("aprovado_em"),
+  aprovadoPorEmail: text("aprovado_por_email"),
+});
+
+export type Usuario = typeof usuarios.$inferSelect;
+export type NovoUsuario = typeof usuarios.$inferInsert;
+
+/**
  * Histórico de contratos firmados (dados oficiais do PNCP,
  * endpoint /v1/contratos) — é aqui que aparece QUEM ganhou: nome
  * e CNPJ do fornecedor, valor e categoria. Base da inteligência
